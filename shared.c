@@ -40,8 +40,12 @@ BOOL IsGoodBufferSize(uint32_t buffer_size)
 
 HANDLE OpenVolume()
 {
-	// TODO: Work for volumes other than C:
-	return CreateFileA("\\\\.\\C:", 0, 0, NULL,
+	TCHAR windows_dir[MAX_PATH], volume_path[7];
+	if (!GetWindowsDirectory(windows_dir, MAX_PATH))
+		return NULL;
+	_snprintf(volume_path, 7, "\\\\.\\%c%c",
+		(char)windows_dir[0], (char)windows_dir[1]);
+	return CreateFileA(volume_path, 0, 0, NULL,
 		OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
 }
 
