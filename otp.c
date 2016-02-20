@@ -123,7 +123,7 @@ int OTP_RequestCCH(uint32_t *key, uint32_t token)
 	memcpy(config_e_size_request, config_e_size_request_g, 16);
 	*(uint32_t*)(config_e_size_request + 4) = token;
 	OTP_Encrypt(config_e_size_request, config_e_size_request, 16);
-	if (!DeviceIoControl(hDrive, CTRL_CONFIG_ENTERPRISE_SIZE,
+	if (!DeviceIoControl(hDrive, IOCTL_DF_CCH_SIZE_REQ,
 		config_e_size_request, 16,
 		&buffer_size, 4,
 		&recv_count, NULL)) {
@@ -154,7 +154,7 @@ int OTP_RequestCCH(uint32_t *key, uint32_t token)
 		config_e_request[i] ^= (temp ^ i);
 
 	OTP_Encrypt(config_e_request, config_e_request, 158);
-	if (!DeviceIoControl(hDrive, CTRL_CONFIG_ENTERPRISE,
+	if (!DeviceIoControl(hDrive, IOCTL_DF_CCH_REQ,
 		config_e_request, 158,
 		config, buffer_size,
 		&recv_count, NULL)) {

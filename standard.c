@@ -55,7 +55,7 @@ int STD_RequestConfig(uint8_t **config)
 
 	// Encrypt config data before sending to the driver
 	STD_Encrypt(config_request, config_request_g, 16);
-	if (!DeviceIoControl(hDrive, CTRL_CONFIG,
+	if (!DeviceIoControl(hDrive, IOCTL_DF_CONF_REQ,
 		config_request, 16,
 		&buffer_size, 4,
 		&recv_count, NULL)) {
@@ -77,7 +77,7 @@ int STD_RequestConfig(uint8_t **config)
 	}
 
 	STD_Encrypt(config_request, config_request_g, 16);
-	if (!DeviceIoControl(hDrive, CTRL_CONFIG,
+	if (!DeviceIoControl(hDrive, IOCTL_DF_CONF_REQ,
 		config_request, 16,
 		config, buffer_size,
 		&recv_count, NULL)) {
