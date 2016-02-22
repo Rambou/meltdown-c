@@ -104,6 +104,36 @@ int OTP_Generate(uint8_t *dest, size_t size, uint32_t cch, uint32_t token)
 	return 0;
 }
 
+BOOL OTP_RequestToken(uint32_t *token)
+{
+	HANDLE hDrive;
+	uint8_t buffer[0x104];
+	uint32_t recv_count;
+
+	hDrive = OpenVolume();
+	if (hDrive == INVALID_HANDLE_VALUE) {
+		return FALSE;
+	}
+
+	if (!DeviceIoControl(hDrive, IOCTL_DF_TOKEN_REQ,
+		NULL, 0,
+		buffer, 0x104,
+		&recv_count, NULL)) {
+		CloseHandle(hDrive);
+		return FALSE;
+	}
+
+	buffer[8] = '\0';
+	// Buffer should now be a hex string
+	if (!ParseHex(token, buffer)) {
+		CloseHandle(hDrive);
+		return FALSE;
+	}
+
+	CloseHandle(hDrive);
+	return TRUE;
+}
+
 /**
  * Communicates with the driver to get key necessary to generate the OTP.
  * Relevant to: Enterprise v8.31

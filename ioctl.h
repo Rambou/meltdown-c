@@ -4,4 +4,5 @@
 #define IOCTL_DF_CONF_REQ (0x72024)
 // Control codes used in: Enterprise v8.31
 #define IOCTL_DF_CCH_SIZE_REQ (0x72020)
+#define IOCTL_DF_TOKEN_REQ (0x72070)
 #define IOCTL_DF_CCH_REQ (0x7207c)

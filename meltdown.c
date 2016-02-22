@@ -24,16 +24,6 @@ int main(int argc, char *argv[])
 	uint32_t cch, token, otp_token;
 	char *edition, otp[64], version[64];
 
-	if (argc < 2) {
-		printf("usage: %s <otp-token>\n", argv[0]);
-		return 1;
-	}
-
-	if (!ParseHex(&otp_token, argv[1])) {
-		fprintf(stderr, "Unable to parse given otp-token as hex: %s\n", argv[1]);
-		return 1;
-	}
-
 	// printf("OTP-Token: 0x%08X\n", otp_token);
 
 	result = DF_GetVersionString(version, 64);
@@ -59,6 +49,11 @@ int main(int argc, char *argv[])
 
 	if (!DFS_ExtractToken(&token)) {
 		fprintf(stderr, "Unable to extract token from DFServ.exe\n");
+		return 1;
+	}
+
+	if (!OTP_RequestToken(&otp_token)) {
+		fprintf(stderr, "Driver request for OTP Token failed\n");
 		return 1;
 	}
 
