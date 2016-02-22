@@ -1,41 +1,66 @@
 #include <stdint.h>
 #include <Windows.h>
-// #include "data.h"
 #include "errors.h"
 #include "ioctl.h"
 #include "shared.h"
 
 // Offset of the key
 #define KEY_OFFSET (0x289)
+// Const value sent in config (size) requests
+#define REQUEST_CONST (0x6789EFDC)
 
-uint8_t config_e_size_request_g[] = {
-	0x00, 0x00, 0x00, 0x00, 0x11, 0x11, 0x11, 0x11,
-	0xDC, 0xEF, 0x89, 0x67, 0x00, 0x00, 0x00, 0x00
-};
+#pragma pack(push,1)
+/**
+ * The request sent to request the Enterprise config data size.
+ * ioctl: IOCTL_DF_CCH_SIZE_REQ
+ */
+typedef struct {
+	uint32_t unknown_1;
+	uint32_t token;
+	uint32_t const_value;
+	uint32_t unknown_2;
+} ent_conf_size_req_t;
+#pragma pack(pop)
 
-// Sent with: CTRL_CONFIG_ENTERPRISE
-uint8_t config_e_request_g[] = {
-	0x11, 0x11, 0x11, 0x11, 0x00, 0x00, 0x00, 0x00,
-	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-	0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00,
-	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x92, 0x00,
-	0x00, 0x00, 0x11, 0x11, 0x11, 0x11, 0xDC, 0xEF,
-	0x89, 0x67, 0x0C, 0x00, 0x00, 0x00
-};
+#pragma pack(push,1)
+/**
+ * The request sent to request the Enterprise config data which contains the
+ * CCH token.
+ * ioctl: IOCTL_DF_CCH_REQ
+ */
+typedef struct {
+	struct {
+		uint32_t token;
+		uint8_t unk_data_1[0x7E];
+		uint32_t unknown_1;
+		uint8_t unk_data_2[0x8];
+		uint32_t struct_size;
+	} head;
+	struct {
+		uint32_t token;
+		uint32_t const_value;
+		uint32_t struct_size;
+	} tail;
+} ent_conf_req_t;
+#pragma pack(pop)
+
+static void OTP_InitConfigRequest(ent_conf_req_t *request, uint32_t token)
+{
+	memset(request, 0, sizeof(*request));
+	request->head.token = token;
+	request->head.unknown_1 = 1;
+	request->head.struct_size = sizeof(request->head); // Should be 0x92
+	request->tail.const_value = REQUEST_CONST;
+	request->tail.token = token;
+	request->tail.struct_size = sizeof(request->tail); // Should be 0xC
+}
+
+static void OTP_InitConfigSizeRequest(ent_conf_size_req_t *request, uint32_t token)
+{
+	memset(request, 0, sizeof(*request));
+	request->token = token;
+	request->const_value = REQUEST_CONST;
+}
 
 // Relevant to: Enterprise v8.31
 uint16_t OTP_GetNextIOControlSeed(uint16_t seed)
@@ -141,20 +166,25 @@ BOOL OTP_RequestToken(uint32_t *token)
 int OTP_RequestCCH(uint32_t *key, uint32_t token)
 {
 	HANDLE hDrive;
-	uint8_t config_e_size_request[16], config_e_request[158];
 	uint32_t buffer_size, recv_count;
-	uint8_t *config;
+	ent_conf_req_t request;
+	ent_conf_size_req_t size_request;
+	uint8_t *config, *req_b, *size_req_b;
+
+	// Initialize the request structs
+	OTP_InitConfigRequest(&request, token);
+	OTP_InitConfigSizeRequest(&size_request, token);
+	req_b = (uint8_t*)&request;
+	size_req_b = (uint8_t*)&size_request;
 
 	hDrive = OpenVolume();
 	if (hDrive == INVALID_HANDLE_VALUE) {
 		return ERR_OPEN_VOLUME;
 	}
 
-	memcpy(config_e_size_request, config_e_size_request_g, 16);
-	*(uint32_t*)(config_e_size_request + 4) = token;
-	OTP_Encrypt(config_e_size_request, config_e_size_request, 16);
+	OTP_Encrypt(size_req_b, size_req_b, sizeof(size_request));
 	if (!DeviceIoControl(hDrive, IOCTL_DF_CCH_SIZE_REQ,
-		config_e_size_request, 16,
+		size_req_b, sizeof(size_request),
 		&buffer_size, 4,
 		&recv_count, NULL)) {
 		CloseHandle(hDrive);
@@ -173,19 +203,14 @@ int OTP_RequestCCH(uint32_t *key, uint32_t token)
 		return ERR_MALLOC;
 	}
 
-	// Set token to two spots in the config buffer
-	memcpy(config_e_request, config_e_request_g, 158);
-	*(uint32_t*)(config_e_request) = token;
-	*(uint32_t*)(config_e_request + 0x92) = token;
-
 	// Extra encrypt?
 	uint8_t i, temp = 0xBC;
 	for (i = 0; i < 0x92; i++, temp++)
-		config_e_request[i] ^= (temp ^ i);
+		req_b[i] ^= (temp ^ i);
 
-	OTP_Encrypt(config_e_request, config_e_request, 158);
+	OTP_Encrypt(req_b, req_b, sizeof(request));
 	if (!DeviceIoControl(hDrive, IOCTL_DF_CCH_REQ,
-		config_e_request, 158,
+		req_b, sizeof(request),
 		config, buffer_size,
 		&recv_count, NULL)) {
 		free(config);
