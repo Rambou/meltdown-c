@@ -29,10 +29,10 @@ void DFS_Decrypt2(uint8_t *dest, const uint8_t *src, size_t size);
 void DFS_DecryptFromTable(uint8_t *dest, const uint8_t *src);
 void DFS_DecryptTailData(uint8_t *dest, const uint8_t *src,
                          const dfserv_tail_header_t *header, size_t size);
-int32_t DFS_GetNextSeed(int32_t seed);
+uint8_t DFS_GetNextSeed(int32_t seed);
 BOOL DFS_ReadTailHeader(dfserv_tail_header_t *header, FILE *file);
 void DFS_Wtf(uint8_t *dest, const uint8_t *src);
 void DFS_DecryptWhatever(uint8_t *dest, uint8_t *key_thing);
-BOOL DFS_ExtractToken(uint32_t *token);
-void DFS_TripleDecrypt(uint8_t *dest);
+BOOL DFS_ExtractToken(uint32_t *token, const int *version);
+void DFS_TripleDecrypt(uint8_t *dest, size_t size, const int* version);
 BOOL DFS_FindAndReadTail(dfserv_tail_header_t *header, uint8_t **data, FILE *file);

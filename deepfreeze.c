@@ -5,6 +5,13 @@
 #include <Windows.h>
 #include "deepfreeze.h"
 
+static void DF_GetInstallPath(char *dest, size_t size)
+{
+	char pf_path[MAX_PATH];
+	SHGetSpecialFolderPath(0, pf_path, CSIDL_PROGRAM_FILES, FALSE);
+	_snprintf(dest, size, "%s\\Faronics\\Deep Freeze\\Install C-0", pf_path);
+}
+
 void DF_GetDriverPath(char *dest, size_t size)
 {
 	char system_path[MAX_PATH];
@@ -21,9 +28,16 @@ void DF_GetDfcPath(char *dest, size_t size)
 
 void DF_GetServPath(char *dest, size_t size)
 {
-	char pf_path[MAX_PATH];
-	SHGetSpecialFolderPath(0, pf_path, CSIDL_PROGRAM_FILES, FALSE);
-	_snprintf(dest, size, "%s\\Faronics\\Deep Freeze\\Install C-0\\DFServ.exe", pf_path);
+	char install_path[MAX_PATH];
+	DF_GetInstallPath(install_path, MAX_PATH);
+	_snprintf(dest, size, "%s\\DFServ.exe", install_path);
+}
+
+void DF_GetFrzState2kPath(char *dest, size_t size)
+{
+	char install_path[MAX_PATH];
+	DF_GetInstallPath(install_path, MAX_PATH);
+	_snprintf(dest, size, "%s\\_$Df\\FrzState2k.exe", install_path);
 }
 
 int DF_GetVersion(int *v)
@@ -64,6 +78,24 @@ int DF_GetVersionString(char *dest, size_t size)
 	_snprintf(dest, size, "%d.%.2d.%.3d.%d",
 		version[0], version[1], version[2], version[3]);
 	return 0;
+}
+
+int DF_GetVersionFull(int *version, char *version_str, size_t size)
+{
+	int result;
+	if ((result = DF_GetVersion(version)) != 0)
+		return result;
+	if ((result = DF_GetVersionString(version_str, size)) != 0)
+		return result;
+	return 0;
+}
+
+BOOL DF_IsVersionOrGreater(int v1, int v2, const int *version)
+{
+	if (version[0] > v1 || (version[0] == v1 && version[1] >= v2))
+		return TRUE;
+	else
+		return FALSE;
 }
 
 BOOL DF_IsEnterprise()

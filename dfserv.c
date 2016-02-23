@@ -178,11 +178,10 @@ int32_t DFS_BuildSeed(const dfserv_tail_header_t *header)
 	return key;
 }
 
-int32_t DFS_GetNextSeed(int32_t seed)
+uint8_t DFS_GetNextSeed(int32_t seed)
 {
-	seed |= (-1 << 16);
-	seed = (0xAB * (seed % 0xB1) - 2 * (seed / 0xB1));
-	return (seed << 15) - seed;
+	seed = OTP_HL((int16_t)seed);
+	return ((seed & 0xFF00) >> 8) ^ (seed & 0xFF);
 }
 
 /**
@@ -192,11 +191,10 @@ void DFS_DecryptTailData(uint8_t *dest, const uint8_t *src,
 	const dfserv_tail_header_t *header, size_t size)
 {
 	size_t i;
-	uint32_t seed, temp;
+	uint32_t seed;
 	seed = DFS_BuildSeed(header);
 	for (i = 0; i < size; i++) {
-		temp = DFS_GetNextSeed(seed + i); // OTP_HL(seed + i);
-		dest[i] = src[i] ^ ((temp & 0xFF00) >> 8) ^ (temp & 0xFF);
+		dest[i] = src[i] ^ DFS_GetNextSeed(seed + i);
 	}
 }
 
@@ -216,15 +214,21 @@ BOOL DFS_ReadTailHeader(dfserv_tail_header_t *header, FILE *file)
 
 /**
  * Perform a "triple decrypt" on some data.
- * @param dest - Buffer to decrypt, must be at least 0x10 in size.
+ * @param dest - Buffer to decrypt.
  */
-void DFS_TripleDecrypt(uint8_t *dest)
+void DFS_TripleDecrypt(uint8_t *dest, size_t size, const int* version)
 {
 	uint8_t full_key_thing[0xF0];
-	DFS_BuildKeyThing(full_key_thing, key_thing_init_g);
-	DFS_DecryptWhatever(dest, full_key_thing);
-	DFS_Decrypt1(dest, dest, 0x10);
-	DFS_Decrypt2(dest, dest, 0x10);
+
+	if (DF_IsVersionOrGreater(8, 11, version) && size >= 0x10) {
+		DFS_BuildKeyThing(full_key_thing, key_thing_init_g);
+		DFS_DecryptWhatever(dest, full_key_thing);
+	}
+
+	if (version[0] > 5) {
+		DFS_Decrypt1(dest, dest, size);
+		DFS_Decrypt2(dest, dest, size);
+	}
 }
 
 BOOL DFS_FindAndReadTail(dfserv_tail_header_t *header, uint8_t **data, FILE *file)
@@ -279,7 +283,7 @@ BOOL DFS_FindAndReadTail(dfserv_tail_header_t *header, uint8_t **data, FILE *fil
  * @param token - Assigned the token upon success.
  * @return TRUE if successful, FALSE if not.
  */
-BOOL DFS_ExtractToken(uint32_t *token)
+BOOL DFS_ExtractToken(uint32_t *token, const int *version)
 {
 	// --- Read DFServ.exe and grab its tail
 	size_t end_offset, tail_size;
@@ -290,7 +294,14 @@ BOOL DFS_ExtractToken(uint32_t *token)
 	dfserv_tail_header_t tail_header;
 	uint8_t *tail_data;
 
-	DF_GetServPath(dfserv_path, MAX_PATH);
+	// In v8.11 or greater, the data we want is in DFServ.exe
+	// Otherwise, it is in FrzState2k.exe
+	if (DF_IsVersionOrGreater(8, 11, version)) {
+		DF_GetServPath(dfserv_path, MAX_PATH);
+	} else {
+		DF_GetFrzState2kPath(dfserv_path, MAX_PATH);
+	}
+
 	dfserv = fopen(dfserv_path, "rb");
 	if (dfserv == NULL) {
 		fprintf(stderr, "Unable to open DFServ.exe, may not be installed?\n");
@@ -303,7 +314,7 @@ BOOL DFS_ExtractToken(uint32_t *token)
 	}
 
 	// Decrypt the tail data (first 0x100 bytes)
-	DFS_DecryptTailData(tail_data, tail_data, &tail_header, 0x100);
+	DFS_DecryptTailData(tail_data, tail_data, &tail_header, 0xC0 /* 0x100 */);
 
 	// Check each entry to make sure at least one starts with: 0xFFFFFFF0
 	uint32_t entry_data_offset = 0, entry_data_size = 0;
@@ -328,19 +339,21 @@ BOOL DFS_ExtractToken(uint32_t *token)
 	entry_data = tail_data + entry_data_offset;
 	DFS_DecryptTailData(entry_data, entry_data, &tail_header, entry_data_size);
 
-	if (*(uint32_t*)(entry_data + (entry_data_size - 4)) == 0xDCBA1234) {
-		// printf("Special last value of entry data, subtracting size\n");
-		entry_data_size -= 0x8;
+	if (DF_IsVersionOrGreater(8, 31, version)) {
+		if (entry_data_size >= 8
+		&& *(uint32_t*)(entry_data + (entry_data_size - 4)) == 0xDCBA1234) {
+			entry_data_size -= 0x8;
+		}
 	}
 
-	if (entry_data_size < 0x10) {
-		fprintf(stderr, "Entry data size is less than 16\n");
-		free(tail_data);
-		return FALSE;
-	}
+	//if (entry_data_size < 0x10) {
+	//	fprintf(stderr, "Entry data size is less than 16\n");
+	//	free(tail_data);
+	//	return FALSE;
+	//}
 
 	// "Triple decrypt" the entry data
-	DFS_TripleDecrypt(entry_data);
+	DFS_TripleDecrypt(entry_data, entry_data_size, version);
 
 	// After the 3-way decryption, first 4 bytes is the token
 	// (unsure if the other data is useful in any way?)
