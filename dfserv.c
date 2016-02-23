@@ -5,7 +5,52 @@
 #include "pe.h"
 #include "shared.h"
 
-void DFS_Decrypt1(uint8_t *dest, const uint8_t *src, size_t size)
+#pragma pack(push,1)
+typedef struct {
+		uint32_t id;
+		uint32_t offset;
+		uint32_t size;
+		uint32_t size_2;
+		uint32_t unknown[4];
+} tail_entry_t;
+#pragma pack(pop)
+
+#pragma pack(push,1)
+typedef struct {
+	uint32_t header_size;
+	uint32_t unknowns_1[3];
+	uint32_t entry_count;
+	uint32_t unknowns_2[4];
+	uint32_t full_size;
+	uint32_t unknowns_3[2];
+	uint32_t xor_keys[4];
+	tail_entry_t dir_entry;
+} tail_header_t;
+#pragma pack(pop)
+
+#define TAIL_HEADER_SIZE (sizeof(tail_header_t))
+
+/**
+ * Set the given tail_entry_t from memory.
+ * @param entry - Entry to set.
+ * @param src   - Memory to read from.
+ */
+static void DFS_SetTailEntry(tail_entry_t *entry, const void *src)
+{
+	memcpy(entry, src, sizeof(*entry));
+}
+
+/**
+ * Set the given tail_header_t from memory.
+ * @param header - Header to set.
+ * @param src    - Memory to read from.
+ */
+static void DFS_SetTailHeader(tail_header_t *header, const void *src)
+{
+	memcpy(header, src, sizeof (*header));
+}
+
+static void DFS_Decrypt1(uint8_t *dest, const uint8_t *src, size_t size)
 {
 	size_t i;
 	uint8_t al = 0x5, cl = 0x25;
@@ -16,7 +61,7 @@ void DFS_Decrypt1(uint8_t *dest, const uint8_t *src, size_t size)
 	}
 }
 
-void DFS_Decrypt2(uint8_t *dest, const uint8_t *src, size_t size)
+static void DFS_Decrypt2(uint8_t *dest, const uint8_t *src, size_t size)
 {
 	size_t i;
 	uint8_t al = 0x0, cl = 0x78;
@@ -30,7 +75,7 @@ void DFS_Decrypt2(uint8_t *dest, const uint8_t *src, size_t size)
 /**
  * Decrypt 16 bytes of src to dest using the hardcoded table.
  */
-void DFS_DecryptFromTable(uint8_t *dest, const uint8_t *src)
+static void DFS_DecryptFromTable(uint8_t *dest, const uint8_t *src)
 {
 	size_t i;
 	uint8_t copy[0x10];
@@ -57,7 +102,7 @@ void DFS_DecryptFromTable(uint8_t *dest, const uint8_t *src)
  * @param src  - Initial buffer, should be at least 0x20 in size.
  * @param dest - Destination buffer, must be at least 0xF0 in size.
  */
-void DFS_BuildKeyThing(uint8_t *dest, const uint8_t *src)
+static void DFS_BuildKeyThing(uint8_t *dest, const uint8_t *src)
 {
 	uint32_t i, j, s;
 	uint8_t arr[4], *block, bl, cl, dl, temp1, temp2, temp3 = 0;
@@ -104,7 +149,7 @@ void DFS_BuildKeyThing(uint8_t *dest, const uint8_t *src)
 /**
  * What the fuck.
  */
-void DFS_Wtf(uint8_t *dest, const uint8_t *src)
+static void DFS_Wtf(uint8_t *dest, const uint8_t *src)
 {
 	uint8_t a, b, copy[0x10], i, j, m;
 
@@ -146,7 +191,7 @@ void DFS_Wtf(uint8_t *dest, const uint8_t *src)
 }
 
 // Decrypt 0x10 bytes, key_thing is 0xF0 bytes
-void DFS_DecryptWhatever(uint8_t *dest, uint8_t *key_thing)
+static void DFS_DecryptWhatever(uint8_t *dest, uint8_t *key_thing)
 {
 	int i;
 	uint8_t buffer[0x10];
@@ -169,7 +214,7 @@ void DFS_DecryptWhatever(uint8_t *dest, uint8_t *key_thing)
  * Build the initial seed (used for decrypting the tail data) from
  * the DFServ.exe tail header.
  **/
-int32_t DFS_BuildSeed(const dfserv_tail_header_t *header)
+static int32_t DFS_BuildSeed(const tail_header_t *header)
 {
 	int32_t i, key = 0;
 	for (i = 0; i < 4; i++)
@@ -178,7 +223,7 @@ int32_t DFS_BuildSeed(const dfserv_tail_header_t *header)
 	return key;
 }
 
-uint8_t DFS_GetNextSeed(int32_t seed)
+static uint8_t DFS_GetNextSeed(int32_t seed)
 {
 	seed = OTP_HL((int16_t)seed);
 	return ((seed & 0xFF00) >> 8) ^ (seed & 0xFF);
@@ -187,8 +232,8 @@ uint8_t DFS_GetNextSeed(int32_t seed)
 /**
  * Decrypt the tail data found at the end of DFServ.exe.
  **/
-void DFS_DecryptTailData(uint8_t *dest, const uint8_t *src,
-	const dfserv_tail_header_t *header, size_t size)
+static void DFS_DecryptTailData(uint8_t *dest, const uint8_t *src,
+	const tail_header_t *header, size_t size)
 {
 	size_t i;
 	uint32_t seed;
@@ -198,25 +243,11 @@ void DFS_DecryptTailData(uint8_t *dest, const uint8_t *src,
 	}
 }
 
-BOOL DFS_ReadTailHeader(dfserv_tail_header_t *header, FILE *file)
-{
-	int i;
-	uint32_t *header32 = (uint32_t*)header;
-
-	// For now, it's sufficient to just read all as 32-bit LE
-	for (i = 0; i < (0x60 / 4); i++) {
-		if (!fread((header32 + i), 4, 1, file))
-			return FALSE;
-	}
-
-	return TRUE;
-}
-
 /**
  * Perform a "triple decrypt" on some data.
  * @param dest - Buffer to decrypt.
  */
-void DFS_TripleDecrypt(uint8_t *dest, size_t size, const int* version)
+static void DFS_TripleDecrypt(uint8_t *dest, size_t size, const int* version)
 {
 	uint8_t full_key_thing[0xF0];
 
@@ -231,44 +262,48 @@ void DFS_TripleDecrypt(uint8_t *dest, size_t size, const int* version)
 	}
 }
 
-BOOL DFS_FindAndReadTail(dfserv_tail_header_t *header, uint8_t **data, FILE *file)
+static size_t DFS_GetTailDataSize(const tail_header_t *header)
 {
-	size_t end_offset, tail_size, tail_data_size;
+	if (header->full_size < header->header_size)
+		return 0;
+	else
+		return header->full_size - header->header_size;
+}
+
+static BOOL DFS_FindAndReadTail(tail_header_t *header, uint8_t **data, FILE *file)
+{
+	size_t end_offset, /* tail_size, */ tail_data_size;
 	long int file_size;
+	uint8_t raw_tail_header[TAIL_HEADER_SIZE];
 
 	if (!FindEndOfLastSection(&end_offset, file)) {
 		fprintf(stderr, "DFServ.exe does not appear to be a valid PE\n");
 		return FALSE;
 	}
 
-	file_size = FileSize(file);
-	if (file_size < 0) {
-		fprintf(stderr, "Unable to determine file size of DFServ.exe\n");
-		return FALSE;
-	}
-
-	tail_size = (size_t)file_size - end_offset;
-
 	// Read the DFServ.exe tail header
 	fseek(file, end_offset, SEEK_SET);
-	if (!DFS_ReadTailHeader(header, file)) {
+	if (fread(raw_tail_header, 1, TAIL_HEADER_SIZE, file) != TAIL_HEADER_SIZE) {
 		fprintf(stderr, "Unable to read the tail header\n");
 		return FALSE;
 	}
+	DFS_SetTailHeader(header, raw_tail_header);
 
-	tail_data_size = header->full_size - header->header_size;
-
-	if (tail_data_size < 0x100) {
-		fprintf(stderr, "Tail data must be at least 0x100 in size\n");
+	// Header size should be 0x60
+	if (header->header_size != TAIL_HEADER_SIZE) {
+		fprintf(stderr, "Unexpected tail header size: 0x%08x\n", header->header_size);
 		return FALSE;
 	}
 
+	// Allocate memory for tail data
+	tail_data_size = DFS_GetTailDataSize(header);
 	*data = (uint8_t*)malloc(sizeof(uint8_t) * tail_data_size);
 	if (*data == NULL) {
 		fprintf(stderr, "Unable to allocate memory for tail data\n");
 		return FALSE;
 	}
 
+	// Read tail data
 	if (fread(*data, 1, tail_data_size, file) != tail_data_size) {
 		fprintf(stderr, "Unable to read all tail data\n");
 		free(*data);
@@ -276,6 +311,12 @@ BOOL DFS_FindAndReadTail(dfserv_tail_header_t *header, uint8_t **data, FILE *fil
 	}
 
 	return TRUE;
+}
+
+static BOOL DFS_IsEntryDataInScope(const tail_entry_t *entry, const tail_header_t *header)
+{
+	return (header->header_size <= entry->offset)
+	&& (header->full_size >= (entry->offset + entry->size));
 }
 
 /**
@@ -288,72 +329,75 @@ BOOL DFS_ExtractToken(uint32_t *token, const int *version)
 	// --- Read DFServ.exe and grab its tail
 	size_t end_offset, tail_size;
 	long int file_size;
-	char dfserv_path[MAX_PATH];
-	FILE *dfserv;
-
-	dfserv_tail_header_t tail_header;
-	uint8_t *tail_data;
+	char file_path[MAX_PATH];
+	uint8_t *dir_data, *entries, *entry_data, *tail_data;
+	tail_header_t tail_header = { 0 };
+	tail_entry_t entry = { 0 };
+	FILE *file;
 
 	// In v8.11 or greater, the data we want is in DFServ.exe
 	// Otherwise, it is in FrzState2k.exe
 	if (DF_IsVersionOrGreater(8, 11, version)) {
-		DF_GetServPath(dfserv_path, MAX_PATH);
+		DF_GetServPath(file_path, MAX_PATH);
 	} else {
-		DF_GetFrzState2kPath(dfserv_path, MAX_PATH);
+		DF_GetFrzState2kPath(file_path, MAX_PATH);
 	}
 
-	dfserv = fopen(dfserv_path, "rb");
-	if (dfserv == NULL) {
+	file = fopen(file_path, "rb");
+	if (file == NULL) {
 		fprintf(stderr, "Unable to open DFServ.exe, may not be installed?\n");
 		return FALSE;
 	}
 
-	if (!DFS_FindAndReadTail(&tail_header, &tail_data, dfserv)) {
+	if (!DFS_FindAndReadTail(&tail_header, &tail_data, file)) {
 		fprintf(stderr, "Unable to read DFServ.exe tail\n");
 		return FALSE;
 	}
 
-	// Decrypt the tail data (first 0x100 bytes)
-	DFS_DecryptTailData(tail_data, tail_data, &tail_header, 0xC0 /* 0x100 */);
-
-	// Check each entry to make sure at least one starts with: 0xFFFFFFF0
-	uint32_t entry_data_offset = 0, entry_data_size = 0;
-	uint32_t *entries = (uint32_t*)tail_data;
-	for (uint32_t i = 0; i < tail_header.entry_count; i++, entries += 8) {
-		if (entries[0] == 0xFFFFFFF0) {
-			entry_data_offset = entries[1];
-			entry_data_size = entries[2];
-		}
+	if (!DFS_IsEntryDataInScope(&(tail_header.dir_entry), &tail_header)) {
+		fprintf(stderr, "Directory entry data is out-of-scope\n");
+		free(tail_data);
+		return FALSE;
 	}
 
-	if (entry_data_offset == 0 && entry_data_size == 0) {
+	// Decrypt the "directory" data
+	dir_data = tail_data + (tail_header.dir_entry.offset - tail_header.header_size);
+	DFS_DecryptTailData(dir_data, dir_data, &tail_header, tail_header.dir_entry.size);
+
+	entries = tail_data;
+	for (uint32_t i = 0; i < tail_header.entry_count; i++, entries += sizeof(entry)) {
+		DFS_SetTailEntry(&entry, entries);
+		if (entry.id == 0xFFFFFFF0)
+			break;
+	}
+
+	if (entry.id != 0xFFFFFFF0) {
 		fprintf(stderr, "Unable to find FFFFFFF0 entry\n");
 		free(tail_data);
 		return FALSE;
 	}
 
-	uint8_t *entry_data;
-	entry_data_offset -= tail_header.header_size;
+	if (!DFS_IsEntryDataInScope(&entry, &tail_header)) {
+		fprintf(stderr, "FFFFFFF0 entry data is out-of-scope\n");
+		free(tail_data);
+		return FALSE;
+	}
+
+	entry.offset -= tail_header.header_size;
 
 	// Decrypt the entry data
-	entry_data = tail_data + entry_data_offset;
-	DFS_DecryptTailData(entry_data, entry_data, &tail_header, entry_data_size);
+	entry_data = tail_data + entry.offset;
+	DFS_DecryptTailData(entry_data, entry_data, &tail_header, entry.size);
 
 	if (DF_IsVersionOrGreater(8, 31, version)) {
-		if (entry_data_size >= 8
-		&& *(uint32_t*)(entry_data + (entry_data_size - 4)) == 0xDCBA1234) {
-			entry_data_size -= 0x8;
+		if (entry.size >= 8
+		&& *(uint32_t*)(entry_data + (entry.size - 4)) == 0xDCBA1234) {
+			entry.size -= 0x8;
 		}
 	}
 
-	//if (entry_data_size < 0x10) {
-	//	fprintf(stderr, "Entry data size is less than 16\n");
-	//	free(tail_data);
-	//	return FALSE;
-	//}
-
 	// "Triple decrypt" the entry data
-	DFS_TripleDecrypt(entry_data, entry_data_size, version);
+	DFS_TripleDecrypt(entry_data, entry.size, version);
 
 	// After the 3-way decryption, first 4 bytes is the token
 	// (unsure if the other data is useful in any way?)
