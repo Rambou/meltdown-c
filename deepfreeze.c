@@ -40,7 +40,7 @@ void DF_GetFrzState2kPath(char *dest, size_t size)
 	_snprintf(dest, size, "%s\\_$Df\\FrzState2k.exe", install_path);
 }
 
-int DF_GetVersion(int *v)
+BOOL DF_GetVersion(int *v)
 {
 	char driver_path[MAX_PATH];
 	DWORD dummy, infoSize;
@@ -52,12 +52,12 @@ int DF_GetVersion(int *v)
 	infoRaw = (uint8_t*)malloc(infoSize);
 	if (!GetFileVersionInfo(driver_path, 0, infoSize, infoRaw)) {
 		free(infoRaw);
-		return ERR_VERSION_INFO;
+		return FALSE;
 	}
 
 	if (!VerQueryValue(infoRaw, "\\", &info, &infoSize)) {
 		free(infoRaw);
-		return ERR_VERSION_QUERY;
+		return FALSE;
 	}
 
 	free(infoRaw);
@@ -67,27 +67,26 @@ int DF_GetVersion(int *v)
 	v[2] = HIWORD(info->dwFileVersionLS);
 	v[3] = LOWORD(info->dwFileVersionLS);
 
-	return 0;
+	return TRUE;
 }
 
-int DF_GetVersionString(char *dest, size_t size)
+BOOL DF_GetVersionString(char *dest, size_t size)
 {
-	int version[4], result;
-	if ((result = DF_GetVersion(version)) != 0)
-		return result;
+	int version[4];
+	if (!DF_GetVersion(version))
+		return FALSE;
 	_snprintf(dest, size, "%d.%.2d.%.3d.%d",
 		version[0], version[1], version[2], version[3]);
-	return 0;
+	return TRUE;
 }
 
-int DF_GetVersionFull(int *version, char *version_str, size_t size)
+BOOL DF_GetVersionFull(int *version, char *version_str, size_t size)
 {
-	int result;
-	if ((result = DF_GetVersion(version)) != 0)
-		return result;
-	if ((result = DF_GetVersionString(version_str, size)) != 0)
-		return result;
-	return 0;
+	if (!DF_GetVersion(version))
+		return FALSE;
+	if (!DF_GetVersionString(version_str, size))
+		return FALSE;
+	return TRUE;
 }
 
 BOOL DF_IsVersionOrGreater(int v1, int v2, const int *version)

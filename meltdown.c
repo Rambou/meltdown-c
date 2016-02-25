@@ -35,12 +35,9 @@ int main(int argc, char *argv[])
 	char *edition, otp[64], version_str[64];
 	BOOL is_enterprise;
 
-	result = DF_GetVersionFull(version, version_str, 64);
-	switch (result) {
-		case ERR_VERSION_INFO:
-		case ERR_VERSION_QUERY:
-			fprintf(stderr, "Deep Freeze driver not found, are you sure it's installed?\n");
-			return 1;
+	if (!DF_GetVersionFull(version, version_str, 64)) {
+		fprintf(stderr, "Deep Freeze driver not found, are you sure it's installed?\n");
+		return 1;
 	}
 
 	is_enterprise = DF_IsEnterprise();
