@@ -98,50 +98,43 @@ static void DFS_DecryptFromTable(uint8_t *dest, const uint8_t *src)
 }
 
 /**
- * Build the "key thing".
- * @param src  - Initial buffer, should be at least 0x20 in size.
+ * Build the key buffer.
+ * @param src  - Initial buffer, must be at least 0x20 in size.
  * @param dest - Destination buffer, must be at least 0xF0 in size.
  */
-static void DFS_BuildKeyThing(uint8_t *dest, const uint8_t *src)
+static void DFS_BuildKeyBuffer(uint8_t *dest, const uint8_t *src)
 {
 	uint32_t i, j, s;
-	uint8_t arr[4], *block, bl, cl, dl, temp1, temp2, temp3 = 0;
+	const uint8_t *table = key_buffer_table_g,
+	              *small_table = key_buffer_small_table_g;
+	uint8_t arr[4], *block, x1, x2, x3, x4;
 	block = dest;
 
 	// Copy first 0x20 bytes of src into dest
 	memcpy(dest, src, 0x20);
-
 	for (i = 8; i < 0x3C; i++, block += 4) {
-		cl = block[0x1C];
-		dl = block[0x1D];
-		bl = block[0x1E];
-		temp1 = bl;
-		bl = block[0x1F];
-		temp2 = bl;
+		x1 = block[0x1C];
+		x2 = block[0x1D];
+		x3 = block[0x1E];
+		x4 = block[0x1F];
 
 		if ((i & 7) == 0) {
-			temp3 = temp2;
-			temp2 = b_469954[block[0x1C]];
-			cl = b_469954[dl];
-			cl ^= b_469F54[i >> 3];
-			dl = b_469954[temp1];
-			bl = b_469954[temp3];
-			temp1 = bl;
+			x1 = table[block[0x1D]] ^ small_table[i >> 3];
+			x2 = table[block[0x1E]];
+			x3 = table[block[0x1F]];
+			x4 = table[block[0x1C]];
 		} else if ((i & 7) == 4) {
-			bl = b_469954[temp1];
-			cl = b_469954[cl];
-			dl = b_469954[dl];
-			temp1 = bl;
-			bl = b_469954[temp2];
-			temp2 = bl;
+			x1 = table[x1];
+			x2 = table[x2];
+			x3 = table[x3];
+			x4 = table[x4];
 		}
 
 		s = ((i << 2) - 0x20);
-		arr[0] = cl ^ block[0];
-		arr[1] = dl ^ dest[s + 1];
-		arr[2] = dest[s + 2] ^ temp1;
-		arr[3] = dest[s + 3] ^ temp2;
-
+		arr[0] = x1 ^ block[0];
+		arr[1] = x2 ^ dest[s + 1];
+		arr[2] = x3 ^ dest[s + 2];
+		arr[3] = x4 ^ dest[s + 3];
 		memcpy(block + 0x20, arr, 4);
 	}
 }
@@ -190,19 +183,19 @@ static void DFS_Wtf(uint8_t *dest, const uint8_t *src)
 	}
 }
 
-// Decrypt 0x10 bytes, key_thing is 0xF0 bytes
-static void DFS_DecryptWhatever(uint8_t *dest, uint8_t *key_thing)
+// Decrypt 0x10 bytes, key_buffer is 0xF0 bytes
+static void DFS_DecryptWhatever(uint8_t *dest, uint8_t *key_buffer)
 {
 	int i;
 	uint8_t buffer[0x10];
 
 	memcpy(buffer, dest, 0x10);
 	// Xor the first 0x10 bytes by the bytes at offset 0xE0
-	XorBytes(buffer, (key_thing + 0xE0), 0x10);
+	XorBytes(buffer, (key_buffer + 0xE0), 0x10);
 	for (i = 0xD; i >= 0; i--) {
-		// Decrypt first 0x10 bytes of key_thing
+		// Decrypt first 0x10 bytes of key_buffer
 		DFS_DecryptFromTable(buffer, buffer);
-		XorBytes(buffer, (key_thing + (i * 0x10)), 0x10);
+		XorBytes(buffer, (key_buffer + (i * 0x10)), 0x10);
 		if (i != 0) {
 			DFS_Wtf(buffer, buffer);
 		}
@@ -249,11 +242,11 @@ static void DFS_DecryptTailData(uint8_t *dest, const uint8_t *src,
  */
 static void DFS_TripleDecrypt(uint8_t *dest, size_t size, const int* version)
 {
-	uint8_t full_key_thing[0xF0];
+	uint8_t key_buffer[0xF0];
 
 	if (DF_IsVersionOrGreater(8, 11, version) && size >= 0x10) {
-		DFS_BuildKeyThing(full_key_thing, key_thing_init_g);
-		DFS_DecryptWhatever(dest, full_key_thing);
+		DFS_BuildKeyBuffer(key_buffer, key_buffer_init_g);
+		DFS_DecryptWhatever(dest, key_buffer);
 	}
 
 	if (version[0] > 5) {
