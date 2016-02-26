@@ -25,7 +25,7 @@ const uint8_t entry_data_xorpad[] = {
 
 static void print_version(const char *edition, const char *version)
 {
-	printf("Detected DeepFreeze %s version %s\n", edition, version);
+	printf("Detected Deep Freeze %s version %s\n", edition, version);
 }
 
 int main(int argc, char *argv[])
