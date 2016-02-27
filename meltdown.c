@@ -43,13 +43,6 @@ int main(int argc, char *argv[])
 	is_enterprise = DF_IsEnterprise();
 	edition = is_enterprise ? "Enterprise" : "Standard";
 
-	// For now, only Enterprise is supported
-	if (!is_enterprise) {
-		print_version(edition, version_str);
-		fprintf(stderr, "Deep Freeze %s is not yet supported\n", edition);
-		return 1;
-	}
-
 	// If Deep Freeze Enterprise earlier than v7.20, the OTP token needs
 	// to be provided by the user
 	// Otherwise, ask the driver for it :)
@@ -64,12 +57,27 @@ int main(int argc, char *argv[])
 			fprintf(stderr, "Unable to parse given OTP token: %s\n", argv[1]);
 			return 1;
 		}
-	} else if (!OTP_RequestToken(&otp_token)) {
+	} else if (is_enterprise && !OTP_RequestToken(&otp_token)) {
 		fprintf(stderr, "Driver request for OTP Token failed\n");
 		return 1;
 	}
 
 	print_version(edition, version_str);
+
+	// If Deep Freeze Standard:
+	if (!is_enterprise) {
+		if (STD_RequestPassword(otp, 64) == 0) {
+			if (strlen(otp) > 0)
+				printf("Password: %s\n", otp);
+			else
+				printf("Password is empty\n");
+			return 0;
+		} else {
+			fprintf(stderr, "Failed to request password: %i\n",
+				STD_RequestPassword(otp, 64));
+			return 1;
+		}
+	}
 
 	if (!DFS_ExtractToken(&token, version)) {
 		fprintf(stderr, "Unable to extract token from DFServ.exe\n");

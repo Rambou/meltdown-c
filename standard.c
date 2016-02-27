@@ -8,39 +8,50 @@
 #include "shared.h"
 #include "standard.h"
 
+#pragma pack(push,1)
+typedef struct {
+	uint32_t initial_seed;
+	uint16_t remaining_size;
+	uint16_t decoded_size;
+} password_header_t;
+#pragma pack(pop)
+
 // Offset of the password in the config data
-#define PASSWORD_OFFSET (0x3b6)
+#define PASSWORD_OFFSET (0x3B6)
 
 // Data that is encrypted then passed to the driver
 // Sent with: CTRL_CONFIG_STANDARD, CTRL_CONFIG_ENTERPRISE_SIZE
-uint8_t config_request_g[] = {
+static const uint8_t config_request_g[] = {
 	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
 	0xDC, 0xDE, 0x89, 0x67, 0x0C, 0x00, 0x00, 0x00
 };
 
-void STD_ReadPasswordHeader(password_header_t *header, const uint8_t *src)
+static void STD_SetPasswordHeader(password_header_t *header, const uint8_t *src)
 {
 	const uint16_t *src16 = (const uint16_t*)src;
 	const uint32_t *src32 = (const uint32_t*)src;
 	header->initial_seed = src32[0];
 	header->remaining_size = src16[2];
-	header->decoded_size = (header->remaining_size - 2) / 2;
+	if (header->remaining_size >= 2)
+		header->decoded_size = (header->remaining_size - 2) / 2;
+	else
+		header->decoded_size = 0;
 }
 
-uint16_t STD_GetNextIOControlSeed(uint16_t seed)
+static uint16_t STD_GetNextIOControlSeed(uint16_t seed)
 {
 	return (((seed % 181) * 163) - ((seed / 181) * 2)) * -1;
 }
 
-void STD_Encrypt(uint8_t *dest, const uint8_t *src, size_t size)
+static void STD_Encrypt(uint8_t *dest, const uint8_t *src, size_t size)
 {
-	Encrypt(dest, src, size, OTP_GetNextIOControlSeed);
+	Encrypt(dest, src, size, STD_GetNextIOControlSeed);
 }
 
 // Communicates with the driver and grabs the config data
 // Expects the caller to free
 // Relevant to: Standard v5.x - v7.x
-int STD_RequestConfig(uint8_t **config)
+static int STD_RequestConfig(uint8_t **config)
 {
 	HANDLE hDrive;
 	uint8_t config_request[16];
@@ -71,15 +82,15 @@ int STD_RequestConfig(uint8_t **config)
 
 	// Allocate enough memory for the config data
 	*config = (uint8_t*)malloc(sizeof(uint8_t) * buffer_size);
-	if (config == NULL) {
+	if (*config == NULL) {
 		CloseHandle(hDrive);
 		return ERR_MALLOC;
 	}
 
-	STD_Encrypt(config_request, config_request_g, 16);
+	//STD_Encrypt(config_request, config_request_g, 16);
 	if (!DeviceIoControl(hDrive, IOCTL_DF_CONF_REQ,
 		config_request, 16,
-		config, buffer_size,
+		*config, buffer_size,
 		&recv_count, NULL)) {
 		free(*config);
 		CloseHandle(hDrive);
@@ -90,12 +101,12 @@ int STD_RequestConfig(uint8_t **config)
 	return 0;
 }
 
-uint32_t STD_GetNextPasswordSeed(uint32_t seed)
+static uint32_t STD_GetNextPasswordSeed(uint32_t seed)
 {
 	return (uint16_t)(32597 * (seed % 177) + 2 * (seed / 177));
 }
 
-void STD_DecodePassword(uint8_t *dest, const uint8_t *src, const password_header_t *header)
+static void STD_DecodePassword(uint8_t *dest, const uint8_t *src, const password_header_t *header)
 {
 	uint32_t seed;
 	uint16_t i, pass_length;
@@ -105,7 +116,7 @@ void STD_DecodePassword(uint8_t *dest, const uint8_t *src, const password_header
 
 	for (i = 0; i < pass_length; i++) {
 		seed = STD_GetNextPasswordSeed(seed);
-		dest[i] = src[6 + (i * 2)] ^ (seed & 0xff);
+		dest[i] = src[(i * 2)] ^ (seed & 0xff);
 	}
 }
 
@@ -123,7 +134,7 @@ int STD_RequestPassword(uint8_t *dest, size_t size)
 	// Go to where the password is
 	password_data = config + PASSWORD_OFFSET;
 	// Read the password header
-	STD_ReadPasswordHeader(&header, password_data);
+	STD_SetPasswordHeader(&header, password_data);
 
 	if (size < (header.decoded_size + 1)) {
 		free(config);
