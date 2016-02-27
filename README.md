@@ -7,6 +7,7 @@ Support
 -------
 Supported versions of Deep Freeze:
 * Enterprise 5.x - 8.31.x
+* Standard 5.x - 7.x
 
 Usage
 -----
