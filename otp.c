@@ -73,6 +73,13 @@ void OTP_Encrypt(uint8_t *dest, const uint8_t *src, size_t size)
 	Encrypt(dest, src, size, OTP_GetNextIOControlSeed);
 }
 
+void OTP_PreEncrypt(uint8_t *dest, const uint8_t *src, size_t size)
+{
+	uint8_t i, temp = 0xBC;
+	for (i = 0; i < size; i++, temp++)
+		dest[i] = src[i] ^ temp ^ i;
+}
+
 uint32_t OTP_CR(const char *str)
 {
 	uint32_t v4, v5, result = 0;
@@ -203,11 +210,7 @@ int OTP_RequestCCH(uint32_t *key, uint32_t token)
 		return ERR_MALLOC;
 	}
 
-	// Extra encrypt?
-	uint8_t i, temp = 0xBC;
-	for (i = 0; i < 0x92; i++, temp++)
-		req_b[i] ^= (temp ^ i);
-
+	OTP_PreEncrypt(req_b, req_b, 0x92);
 	OTP_Encrypt(req_b, req_b, sizeof(request));
 	if (!DeviceIoControl(hDrive, IOCTL_DF_CCH_REQ,
 		req_b, sizeof(request),
