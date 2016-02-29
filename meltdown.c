@@ -4,9 +4,7 @@
 #include "deepfreeze.h"
 #include "dfserv.h"
 #include "errors.h"
-#include "ioctl.h"
 #include "otp.h"
-#include "shared.h"
 #include "standard.h"
 
 #define OTP_REQUIRED_MSG "\n" \
