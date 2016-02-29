@@ -6,7 +6,6 @@
 #include "errors.h"
 #include "ioctl.h"
 #include "otp.h"
-#include "pe.h"
 #include "shared.h"
 #include "standard.h"
 

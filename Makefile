@@ -2,8 +2,8 @@
 
 PATH      = %ProgramFiles(x86)%\Microsoft SDKs\Windows\7.1A\Bin;$(PATH)
 TARGET    = meltdown.exe
-SOURCES   = meltdown.c deepfreeze.c dfserv.c otp.c pe.c shared.c standard.c
-HEADERS   = data.h deepfreeze.h dfserv.h errors.h ioctl.h otp.h pe.h shared.h standard.h
+SOURCES   = meltdown.c deepfreeze.c dfserv.c otp.c shared.c standard.c
+HEADERS   = data.h deepfreeze.h dfserv.h errors.h ioctl.h otp.h shared.h standard.h
 INCPATH   = /I:"%ProgramFiles(x86)%\Microsoft SDKs\Windows\7.1A\Include"
 LIBPATH   = /libpath:"%ProgramFiles(x86)%\Microsoft SDKs\Windows\7.1A\Lib"
 LIBS      = crypt32.lib shell32.lib shlwapi.lib version.lib

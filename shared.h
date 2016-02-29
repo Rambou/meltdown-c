@@ -1,5 +1,6 @@
 #pragma once
 
+#include <stdio.h>
 #include <stdint.h>
 #include <Windows.h>
 
@@ -8,6 +9,7 @@ typedef uint16_t (*NextSeedFunction)(uint16_t seed);
 
 void strlower(char *dest, const char *src);
 void Encrypt(uint8_t *dest, const uint8_t *src, size_t size, NextSeedFunction Next);
+BOOL FindEndOfLastSection(size_t *end_offset, FILE *file);
 uint16_t GetIOControlSeed();
 BOOL IsGoodBufferSize(uint32_t buffer_size);
 HANDLE OpenVolume();

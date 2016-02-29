@@ -2,7 +2,6 @@
 #include "data.h"
 #include "deepfreeze.h"
 #include "dfserv.h"
-#include "pe.h"
 #include "shared.h"
 
 #pragma pack(push,1)
